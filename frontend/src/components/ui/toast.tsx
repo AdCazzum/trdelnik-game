@@ -101,13 +101,24 @@ ToastTitle.displayName = ToastPrimitives.Title.displayName
 const ToastDescription = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Description>,
   React.ComponentPropsWithoutRef<typeof ToastPrimitives.Description>
->(({ className, ...props }, ref) => (
-  <ToastPrimitives.Description
-    ref={ref}
-    className={cn("text-sm opacity-90", className)}
-    {...props}
-  />
-))
+>(({ className, children, ...props }, ref) => {
+  const content = typeof children === 'string' ? (
+    <span dangerouslySetInnerHTML={{ __html: children }} />
+  ) : children;
+
+  return (
+    <ToastPrimitives.Description
+      ref={ref}
+      className={cn(
+        "text-sm opacity-90 [&>a]:text-base [&>a]:font-medium [&>a]:text-blue-500 [&>a]:hover:text-blue-400 [&>a]:underline [&>a]:underline-offset-2 [&>a]:transition-colors [&>a]:duration-200",
+        className
+      )}
+      {...props}
+    >
+      {content}
+    </ToastPrimitives.Description>
+  );
+})
 ToastDescription.displayName = ToastPrimitives.Description.displayName
 
 type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>

@@ -3,11 +3,11 @@ import { toast } from '@/components/ui/use-toast';
 import { Difficulty, GAME_CONFIGS } from '@/components/GameBoard';
 import { ethers } from 'ethers';
 import contractArtifact from '../../../contracts/artifacts/contracts/Game.sol/TrdelnikGame.json';
+import { useWallet } from './useWallet';
 
-// TODO: Replace with actual contract address when deployed
-const CONTRACT_ADDRESS = '0xefAB5594DB78bE844AEEED30a0C50333bacB7261'; // PLACEHOLDER
-
+const CONTRACT_ADDRESS = '0xefAB5594DB78bE844AEEED30a0C50333bacB7261';
 const CONTRACT_ABI = contractArtifact.abi;
+const BLOCKSCOUT_URL = import.meta.env.VITE_BLOCKSCOUT_URL || 'https://blockscout.com/astar/tx/';
 
 interface GameState {
   gameId?: number;
@@ -19,6 +19,7 @@ interface GameState {
 }
 
 export const useGameContract = () => {
+  const { isConnected } = useWallet();
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -37,7 +38,7 @@ export const useGameContract = () => {
   }, [gameState]);
 
   // Start a new game
-  const startGame = async (difficulty: Difficulty, betAmount: string) => {
+  const startGame = useCallback(async (difficulty: Difficulty, betAmount: string) => {
     if (!window.ethereum) {
       toast({
         title: "MetaMask not found",
@@ -59,12 +60,12 @@ export const useGameContract = () => {
       });
       
       const receipt = await tx.wait();
-      
+
       // Get the gameId from the GameStarted event
       const gameStartedEvent = receipt.logs.find(
         (log: any) => log.fragment?.name === 'GameStarted'
       );
-      
+
       if (!gameStartedEvent) {
         throw new Error('GameStarted event not found');
       }
@@ -82,7 +83,8 @@ export const useGameContract = () => {
 
       toast({
         title: "Game Started!",
-        description: `Game ID: ${gameId} - First step completed!`,
+        description: `Game ID: ${gameId}<br/>View on <a href="${BLOCKSCOUT_URL}${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
+        variant: "default",
       });
 
     } catch (error: any) {
@@ -95,10 +97,10 @@ export const useGameContract = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // Play next step
-  const playStep = async () => {
+  const playStep = useCallback(async () => {
     if (!gameState?.gameId) return;
 
     setIsLoading(true);
@@ -110,12 +112,12 @@ export const useGameContract = () => {
       
       const tx = await contract.playStep(gameState.gameId);
       const receipt = await tx.wait();
-      
+
       // Get the step result from the StepResult event
       const stepResultEvent = receipt.logs.find(
         (log: any) => log.fragment?.name === 'StepResult'
       );
-      
+
       if (!stepResultEvent) {
         throw new Error('StepResult event not found');
       }
@@ -128,7 +130,8 @@ export const useGameContract = () => {
         
         toast({
           title: "Step Successful! 🎉",
-          description: `Advanced to step ${newStep}`,
+          description: `Advanced to step ${newStep}<br/>View on <a href="${BLOCKSCOUT_URL}${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
+          variant: "default",
         });
 
         // Check if reached max steps
@@ -145,7 +148,7 @@ export const useGameContract = () => {
         
         toast({
           title: "Game Over! 💥",
-          description: "You lost this round. Better luck next time!",
+          description: `You lost this round. Better luck next time!<br/>View on <a href="${BLOCKSCOUT_URL}${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
           variant: "destructive",
         });
       }
@@ -160,10 +163,10 @@ export const useGameContract = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [gameState]);
 
   // Cash out current winnings
-  const cashOut = async () => {
+  const cashOut = useCallback(async () => {
     if (!gameState?.gameId) return;
 
     setIsLoading(true);
@@ -175,12 +178,12 @@ export const useGameContract = () => {
       
       const tx = await contract.doCashout(gameState.gameId);
       const receipt = await tx.wait();
-      
+
       // Get the payout from the Cashout event
       const cashoutEvent = receipt.logs.find(
         (log: any) => log.fragment?.name === 'Cashout'
       );
-      
+
       if (!cashoutEvent) {
         throw new Error('Cashout event not found');
       }
@@ -192,7 +195,8 @@ export const useGameContract = () => {
 
       toast({
         title: "Successfully Cashed Out! 💰",
-        description: `You won ${payout} ETH (${finalMultiplier.toFixed(2)}x multiplier)`,
+        description: `You won ${payout} ETH (${finalMultiplier.toFixed(2)}x multiplier)<br/>View on <a href="${BLOCKSCOUT_URL}${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
+        variant: "default",
       });
 
     } catch (error: any) {
@@ -205,7 +209,7 @@ export const useGameContract = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [gameState, getCurrentMultiplier]);
 
   return {
     gameState,

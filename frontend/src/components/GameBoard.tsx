@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import DifficultySelector from './DifficultySelector';
 import GameSteps from './GameSteps';
@@ -8,6 +7,7 @@ import { useGameContract } from '@/hooks/useGameContract';
 import { useWallet } from '@/hooks/useWallet';
 import { Card } from '@/components/ui/card';
 import { Wallet } from 'lucide-react';
+import { MeritsRanking } from './MeritsRanking';
 
 export type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Hardcore';
 
@@ -61,36 +61,39 @@ const GameBoard = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <GameSteps 
-        config={config}
-        currentStep={gameState?.currentStep || 0}
-        gameActive={gameState?.active || false}
-        gameLost={gameState?.lost || false}
-        currentMultiplier={getCurrentMultiplier()}
-      />
+    <div className="container mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto space-y-6">
+        <GameSteps 
+          config={config}
+          currentStep={gameState?.currentStep || 0}
+          gameActive={gameState?.active || false}
+          gameLost={gameState?.lost || false}
+          currentMultiplier={getCurrentMultiplier()}
+        />
 
-      <GameControls
-        gameState={gameState}
-        betAmount={betAmount}
-        difficulty={difficulty}
-        isLoading={isLoading}
-        onStartGame={startGame}
-        onPlayStep={playStep}
-        onCashOut={cashOut}
-      />
-      
-      <BettingPanel 
-        betAmount={betAmount}
-        setBetAmount={setBetAmount}
-        disabled={gameState?.active || false}
-      />
+        <GameControls
+          gameState={gameState}
+          betAmount={betAmount}
+          difficulty={difficulty}
+          isLoading={isLoading}
+          onStartGame={startGame}
+          onPlayStep={playStep}
+          onCashOut={cashOut}
+        />
+        
+        <BettingPanel 
+          betAmount={betAmount}
+          setBetAmount={setBetAmount}
+          disabled={gameState?.active || false}
+        />
 
-      <DifficultySelector 
-        difficulty={difficulty} 
-        setDifficulty={setDifficulty}
-        disabled={gameState?.active || false}
-      />
+        <DifficultySelector 
+          difficulty={difficulty} 
+          setDifficulty={setDifficulty}
+          disabled={gameState?.active || false}
+        />
+      </div>
+      <MeritsRanking />
     </div>
   );
 };
