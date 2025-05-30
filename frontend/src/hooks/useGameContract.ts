@@ -1,36 +1,13 @@
-
 import { useState, useCallback } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { Difficulty, GAME_CONFIGS } from '@/components/GameBoard';
+import { ethers } from 'ethers';
+import contractArtifact from '../../../contracts/artifacts/contracts/Game.sol/TrdelnikGame.json';
 
 // TODO: Replace with actual contract address when deployed
 const CONTRACT_ADDRESS = '0x0000000000000000000000000000000000000000'; // PLACEHOLDER
 
-// TODO: Replace with actual contract ABI
-const CONTRACT_ABI = [
-  // Placeholder ABI - replace with actual contract ABI
-  {
-    "inputs": [{"name": "difficulty", "type": "uint8"}],
-    "name": "startGame",
-    "outputs": [{"name": "gameId", "type": "uint256"}],
-    "stateMutability": "payable",
-    "type": "function"
-  },
-  {
-    "inputs": [{"name": "gameId", "type": "uint256"}],
-    "name": "playStep",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [{"name": "gameId", "type": "uint256"}],
-    "name": "cashout",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  }
-];
+const CONTRACT_ABI = contractArtifact.abi;
 
 interface GameState {
   gameId?: number;
@@ -73,24 +50,29 @@ export const useGameContract = () => {
     setIsLoading(true);
 
     try {
-      // TODO: Replace with actual contract interaction
-      console.log('Starting game with:', { difficulty, betAmount, contractAddress: CONTRACT_ADDRESS });
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
       
-      // Simulate contract call delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const tx = await contract.startGame(difficultyToEnum(difficulty), {
+        value: ethers.parseEther(betAmount)
+      });
       
-      // TODO: Replace with actual contract call
-      // const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      // const tx = await contract.startGame(difficultyToEnum(difficulty), {
-      //   value: ethers.utils.parseEther(betAmount)
-      // });
-      // await tx.wait();
-
-      // Simulate successful game start
-      const mockGameId = Math.floor(Math.random() * 10000);
+      const receipt = await tx.wait();
+      
+      // Get the gameId from the GameStarted event
+      const gameStartedEvent = receipt.logs.find(
+        (log: any) => log.fragment?.name === 'GameStarted'
+      );
+      
+      if (!gameStartedEvent) {
+        throw new Error('GameStarted event not found');
+      }
+      
+      const gameId = gameStartedEvent.args[0];
       
       setGameState({
-        gameId: mockGameId,
+        gameId: Number(gameId),
         active: true,
         lost: false,
         currentStep: 1, // First step completed automatically
@@ -100,7 +82,7 @@ export const useGameContract = () => {
 
       toast({
         title: "Game Started!",
-        description: `Game ID: ${mockGameId} - First step completed!`,
+        description: `Game ID: ${gameId} - First step completed!`,
       });
 
     } catch (error: any) {
@@ -122,20 +104,24 @@ export const useGameContract = () => {
     setIsLoading(true);
 
     try {
-      // TODO: Replace with actual contract interaction
-      console.log('Playing step for game:', gameState.gameId);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
       
-      // Simulate contract call delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      // TODO: Replace with actual contract call
-      // const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      // await contract.playStep(gameState.gameId);
-
-      // Simulate step result based on difficulty probability
-      const config = GAME_CONFIGS[gameState.difficulty];
-      const success = Math.random() * 100 < config.winProbability;
-
+      const tx = await contract.playStep(gameState.gameId);
+      const receipt = await tx.wait();
+      
+      // Get the step result from the StepResult event
+      const stepResultEvent = receipt.logs.find(
+        (log: any) => log.fragment?.name === 'StepResult'
+      );
+      
+      if (!stepResultEvent) {
+        throw new Error('StepResult event not found');
+      }
+      
+      const success = stepResultEvent.args[2];
+      
       if (success) {
         const newStep = gameState.currentStep + 1;
         setGameState(prev => prev ? { ...prev, currentStep: newStep } : null);
@@ -146,12 +132,13 @@ export const useGameContract = () => {
         });
 
         // Check if reached max steps
+        const config = GAME_CONFIGS[gameState.difficulty];
         if (newStep >= config.maxSteps) {
           toast({
             title: "Maximum Steps Reached!",
             description: "Auto-cashing out your winnings!",
           });
-          // Auto cash out would happen here
+          await cashOut();
         }
       } else {
         setGameState(prev => prev ? { ...prev, active: false, lost: true } : null);
@@ -182,24 +169,30 @@ export const useGameContract = () => {
     setIsLoading(true);
 
     try {
-      // TODO: Replace with actual contract interaction
-      console.log('Cashing out game:', gameState.gameId);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
       
-      // Simulate contract call delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // TODO: Replace with actual contract call
-      // const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      // await contract.cashout(gameState.gameId);
-
+      const tx = await contract.doCashout(gameState.gameId);
+      const receipt = await tx.wait();
+      
+      // Get the payout from the Cashout event
+      const cashoutEvent = receipt.logs.find(
+        (log: any) => log.fragment?.name === 'Cashout'
+      );
+      
+      if (!cashoutEvent) {
+        throw new Error('Cashout event not found');
+      }
+      
+      const payout = ethers.formatEther(cashoutEvent.args[1]);
       const finalMultiplier = getCurrentMultiplier();
-      const winnings = (parseFloat(gameState.bet) * finalMultiplier).toFixed(4);
 
       setGameState(prev => prev ? { ...prev, active: false } : null);
 
       toast({
         title: "Successfully Cashed Out! 💰",
-        description: `You won ${winnings} ETH (${finalMultiplier.toFixed(2)}x multiplier)`,
+        description: `You won ${payout} ETH (${finalMultiplier.toFixed(2)}x multiplier)`,
       });
 
     } catch (error: any) {
