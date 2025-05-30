@@ -5,7 +5,7 @@ import { ethers } from 'ethers';
 import contractArtifact from '../../../contracts/artifacts/contracts/Game.sol/TrdelnikGame.json';
 
 // TODO: Replace with actual contract address when deployed
-const CONTRACT_ADDRESS = '0x0000000000000000000000000000000000000000'; // PLACEHOLDER
+const CONTRACT_ADDRESS = '0xefAB5594DB78bE844AEEED30a0C50333bacB7261'; // PLACEHOLDER
 
 const CONTRACT_ABI = contractArtifact.abi;
 
