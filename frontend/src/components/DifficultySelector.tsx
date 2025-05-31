@@ -13,7 +13,7 @@ interface DifficultySelectorProps {
 const DIFFICULTY_REQUIREMENTS: Record<Difficulty, number> = {
   Easy: 0,
   Medium: 100,
-  Hard: 110,
+  Hard: 120,
   Hardcore: 200
 };
 
