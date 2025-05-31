@@ -7,14 +7,11 @@
     "compile": "hardhat compile",
     "clean": "hardhat clean",
     "node": "hardhat node",
-    
     "deploy": "hardhat run scripts/deploy.ts",
-    
     "deploy:berachain": "npm run deploy -- --network berachain",
     "deploy:bepolia": "npm run deploy -- --network bepolia",
     "deploy:flare": "npm run deploy -- --network flare",
     "deploy:coston2": "npm run deploy -- --network coston2",
-    
     "verify": "hardhat verify"
   },
   "keywords": [],
@@ -30,11 +27,12 @@
     "@flarenetwork/flare-periphery-contract-artifacts": "0.1.26",
     "@flarenetwork/flare-periphery-contracts": "0.1.26",
     "@openzeppelin/contracts": "^5.2.0",
+    "@pythnetwork/entropy-sdk-solidity": "^2.0.0",
     "@typescript-eslint/eslint-plugin": "^7.3.1",
     "@typescript-eslint/parser": "^7.3.1",
+    "dotenv": "^16.5.0",
     "ethers": "^6.4.0",
     "hardhat": "^2.22.18",
-    "solhint": "^4.5.2",
-    "dotenv": "^16.5.0"
+    "solhint": "^4.5.2"
   }
 }

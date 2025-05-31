@@ -62,7 +62,7 @@ const GameControls = ({
               </span>
             </div>
             <div className="text-sm text-green-200">
-              Ready to buzz with {difficulty} difficulty
+              Ready to buzz with {difficulty} difficulty, remeber that for every game you will get free merits!
             </div>
           </button>
         ) : (
