@@ -1,5 +1,5 @@
 import { useMerits } from '@/hooks/useMerits';
-import { Trophy } from 'lucide-react';
+import { Trophy, ExternalLink } from 'lucide-react';
 
 export const MeritsRanking = () => {
   const { rank, totalBalance, usersBelow, topPercent, isLoading } = useMerits();
@@ -31,6 +31,15 @@ export const MeritsRanking = () => {
           </div>
         </div>
       </div>
+      <a 
+        href="https://merits-staging.blockscout.com/" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="mt-2 flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+      >
+        <ExternalLink className="h-3 w-3" />
+        Learn more about Merits
+      </a>
     </div>
   );
 }; 

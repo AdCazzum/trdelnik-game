@@ -10,6 +10,8 @@ const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
 
 const CONTRACT_ABI = contractArtifact.abi;
 const BLOCKSCOUT_URL = import.meta.env.VITE_BLOCKSCOUT_URL || 'https://blockscout.com/astar/tx/';
+const MERITS_API_URL = import.meta.env.VITE_MERITS_API_PARTNER_URL || 'https://merits-staging.blockscout.com/api/v1';
+const MERITS_API_KEY = import.meta.env.VITE_MERITS_API_KEY;
 
 interface GameState {
   gameId?: number;
@@ -20,8 +22,8 @@ interface GameState {
   difficulty: Difficulty;
 }
 
-export const useGameContract = () => {
-  const { isConnected } = useWallet();
+export const useGameContract = (onMeritsDistributed?: () => void) => {
+  const { isConnected, address } = useWallet();
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -38,6 +40,56 @@ export const useGameContract = () => {
     const config = GAME_CONFIGS[gameState.difficulty];
     return Math.pow(config.startMultiplier, gameState.currentStep);
   }, [gameState]);
+
+  // Distribute Merits
+  const distributeMerits = async (address: string) => {
+    try {
+      const response = await fetch(`${MERITS_API_URL}/partner/api/v1/distribute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': MERITS_API_KEY || '',
+        },
+        body: JSON.stringify({
+          id: `trdelnik_game-${Date.now()}`,
+          description: "Merits reward for playing Trdelnik Game",
+          distributions: [
+            {
+              address,
+              amount: "1"
+            }
+          ],
+          create_missing_accounts: false,
+          expected_total: "1"
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to distribute Merits: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Merits distributed:', data);
+
+      // Show success toast
+      toast({
+        title: "Merits Earned! 🎉",
+        description: "You've earned 1 Merit for playing Trdelnik Game",
+        variant: "default",
+      });
+
+      // Call the callback to refresh Merits data
+      onMeritsDistributed?.();
+
+    } catch (error) {
+      console.error('Failed to distribute Merits:', error);
+      toast({
+        title: "Failed to distribute Merits",
+        description: "Don't worry, you can still play the game!",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Start a new game
   const startGame = useCallback(async (difficulty: Difficulty, betAmount: string) => {
@@ -83,6 +135,11 @@ export const useGameContract = () => {
         difficulty
       });
 
+      // Distribute Merits
+      if (address) {
+        await distributeMerits(address);
+      }
+
       toast({
         title: "Game Started!",
         description: `Game ID: ${gameId}<br/>View on <a href="${BLOCKSCOUT_URL}${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
@@ -99,7 +156,7 @@ export const useGameContract = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [address]);
 
   // Play next step
   const playStep = useCallback(async () => {

@@ -1,8 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from './useWallet';
-
-const MERITS_API_URL = 'https://merits-staging.blockscout.com/api/v1';
-const MERITS_PARTNER_API_URL = 'https://merits-staging.blockscout.com/partner/api/v1';
 
 interface MeritsState {
   isRegistered: boolean;
@@ -12,93 +9,85 @@ interface MeritsState {
   topPercent?: number;
 }
 
+const MERITS_API_URL = import.meta.env.VITE_MERITS_API_URL || 'https://merits-staging.blockscout.com/api/v1';
+
 export const useMerits = () => {
-  const { address, signer } = useWallet();
+  const { address } = useWallet();
   const [meritsState, setMeritsState] = useState<MeritsState>({ isRegistered: false });
   const [isLoading, setIsLoading] = useState(false);
 
-  const getNonce = async () => {
-    const response = await fetch(`${MERITS_API_URL}/auth/nonce`);
-    const data = await response.json();
-    return data.nonce;
-  };
-
-  const registerUser = async () => {
-    if (!address || !signer) return;
+  const fetchUserInfo = useCallback(async () => {
+    if (!address) return;
 
     try {
       setIsLoading(true);
       
-      // Get nonce
-      const nonce = await getNonce();
-      
-      // Create message
-      const message = `merits.blockscout.com wants you to sign in with your Ethereum account:\n${address}\n\nSign-In for the Blockscout Merits program.\n\nURI: https://merits-staging.blockscout.com\nVersion: 1\nChain ID: 1\nNonce: ${nonce}\nIssued At: ${new Date().toISOString()}\nExpiration Time: ${new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()}`;
-      
-      // Get signature
-      const signature = await signer.signMessage(message);
-      
-      // Register user
-      const response = await fetch(`${MERITS_API_URL}/auth/login`, {
-        method: 'POST',
+      // Get user info
+      const userResponse = await fetch(`${MERITS_API_URL}/auth/user/${address}`, {
         headers: {
-          'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
-        body: JSON.stringify({
-          nonce,
-          message,
-          signature,
-        }),
       });
 
-      const data = await response.json();
-      if (data.token) {
-        // Store token in localStorage
-        localStorage.setItem('merits_token', data.token);
-        setMeritsState(prev => ({ ...prev, isRegistered: true }));
+      console.log('Merits API response:', userResponse.status, userResponse.statusText);
+      const userData = await userResponse.json();
+      console.log('Merits user data:', userData);
+
+      if (!userResponse.ok) {
+        throw new Error(`Failed to fetch user info: ${userResponse.status} ${userResponse.statusText}`);
+      }
+
+      // Get leaderboard info
+      const leaderboardResponse = await fetch(`${MERITS_API_URL}/leaderboard/users/${address}`, {
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!leaderboardResponse.ok) {
+        throw new Error(`Failed to fetch leaderboard info: ${leaderboardResponse.status} ${leaderboardResponse.statusText}`);
+      }
+
+      const leaderboardData = await leaderboardResponse.json();
+      console.log('Merits leaderboard data:', leaderboardData);
+
+      // Check if user exists and has ranking
+      if (leaderboardData && leaderboardData.rank) {
+        setMeritsState({
+          isRegistered: true,
+          rank: Number(leaderboardData.rank),
+          totalBalance: Number(leaderboardData.total_balance || 0),
+          usersBelow: Number(leaderboardData.users_below || 0),
+          topPercent: Number(leaderboardData.top_percent || 0),
+        });
+      } else {
+        console.log('User exists but not ranked yet');
+        setMeritsState({
+          isRegistered: true,
+          rank: undefined,
+          totalBalance: 0,
+          usersBelow: 0,
+          topPercent: 0,
+        });
       }
     } catch (error) {
-      console.error('Failed to register user:', error);
+      console.error('Failed to fetch Merits info:', error);
+      setMeritsState({ isRegistered: false });
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const fetchUserRanking = async () => {
-    if (!address) return;
-
-    try {
-      const response = await fetch(`${MERITS_API_URL}/leaderboard/users/${address}`);
-      const data = await response.json();
-      
-      setMeritsState(prev => ({
-        ...prev,
-        rank: Number(1),
-        totalBalance: Number(data.total_balance),
-        usersBelow: Number(data.users_below),
-        topPercent: Number(data.top_percent),
-      }));
-    } catch (error) {
-      console.error('Failed to fetch user ranking:', error);
-    }
-  };
+  }, [address]);
 
   useEffect(() => {
     if (address) {
-      const token = localStorage.getItem('merits_token');
-      if (token) {
-        setMeritsState(prev => ({ ...prev, isRegistered: true }));
-        fetchUserRanking();
-      } else {
-        registerUser();
-      }
+      console.log('Fetching Merits info for address:', address);
+      fetchUserInfo();
     }
-  }, [address]);
+  }, [address, fetchUserInfo]);
 
   return {
     ...meritsState,
     isLoading,
-    registerUser,
-    fetchUserRanking,
+    fetchUserInfo,
   };
 }; 

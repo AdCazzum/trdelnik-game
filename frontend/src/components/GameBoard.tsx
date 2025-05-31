@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import DifficultySelector from './DifficultySelector';
 import GameSteps from './GameSteps';
 import BettingPanel from './BettingPanel';
@@ -8,6 +8,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { Card } from '@/components/ui/card';
 import { Wallet } from 'lucide-react';
 import { MeritsRanking } from './MeritsRanking';
+import { useMerits } from '@/hooks/useMerits';
 
 export type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Hardcore';
 
@@ -26,9 +27,20 @@ export const GAME_CONFIGS: Record<Difficulty, GameConfig> = {
 };
 
 const GameBoard = () => {
-  const { isConnected } = useWallet();
+  const { address } = useWallet();
+  const { fetchUserInfo } = useMerits();
   const [difficulty, setDifficulty] = useState<Difficulty>('Easy');
   const [betAmount, setBetAmount] = useState<string>('0.01');
+  const [meritsKey, setMeritsKey] = useState(0);
+
+  const handleMeritsDistributed = useCallback(async () => {
+    // Wait 2 seconds before refreshing
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Refresh Merits data
+    await fetchUserInfo();
+    // Force MeritsRanking to re-render
+    setMeritsKey(prev => prev + 1);
+  }, [fetchUserInfo]);
   
   const { 
     gameState, 
@@ -37,12 +49,12 @@ const GameBoard = () => {
     playStep, 
     cashOut,
     getCurrentMultiplier 
-  } = useGameContract();
+  } = useGameContract(handleMeritsDistributed);
 
   const config = GAME_CONFIGS[difficulty];
 
   // If wallet is not connected, show connection message
-  if (!isConnected) {
+  if (!address) {
     return (
       <div className="max-w-6xl mx-auto">
         <Card className="p-8 bg-gradient-to-br from-red-600/30 to-pink-600/20 backdrop-blur-sm border-2 border-red-500/50 text-center">
@@ -93,7 +105,7 @@ const GameBoard = () => {
           disabled={gameState?.active || false}
         />
       </div>
-      <MeritsRanking />
+      <MeritsRanking key={meritsKey} />
     </div>
   );
 };
