@@ -38,11 +38,14 @@ describe("TrdelnikGame", function () {
 
   describe("Gameplay", function () {
     beforeEach(async function () {
-      await game.connect(player).startGame(0, { value: betAmount });
+      const gameWithPlayer = game.connect(player);
+      await gameWithPlayer.startGame(0, { value: betAmount });
     });
 
     it("Should allow playing next step", async function () {
-      await expect(game.connect(player).playStep(0))
+      const gameWithPlayer = game.connect(player);
+      
+      await expect(gameWithPlayer.playStep(0))
         .to.emit(game, "StepRequested")
         //NOTE: 3 is the last game id because it has already started 3 games
         //NOTE: Test not well formed, sometimes it fails because of randomicity
@@ -51,13 +54,17 @@ describe("TrdelnikGame", function () {
 
     it("Should not allow playing someone else's game", async function () {
       const [otherPlayer, _] = await ethers.getSigners();
+      const gameWithOtherPlayer = game.connect(otherPlayer);
+      
       await expect(
-        game.connect(otherPlayer).playStep(0)
+        gameWithOtherPlayer.playStep(0)
       ).to.be.revertedWith("not-your-game");
     });
 
     it("Should not allow cashout if no people lost money", async function () {
-      await expect(game.connect(player).doCashout(0))
+      const gameWithPlayer = game.connect(player);
+      
+      await expect(gameWithPlayer.doCashout(0))
         .to.be.revertedWith("contract-insolvent");
     });
   });

@@ -3,12 +3,9 @@ import { Trophy, XCircle, History } from 'lucide-react';
 import { useGameContract } from '@/hooks/useGameContract';
 import { useEffect, useState } from 'react';
 import { ethers } from 'ethers';
-import contractArtifact from '../../../contracts/artifacts/contracts/Game.sol/TrdelnikGame.json';
 import { useAkave } from '../hooks/useAkave';
+import { useChain } from '../hooks/useChain';
 
-const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
-const CONTRACT_ABI = contractArtifact.abi;
-const BLOCKSCOUT_URL = import.meta.env.VITE_BLOCKSCOUT_URL_BASE;
 const BLOCK_LIMIT = 30; // Maximum blocks per request
 const TOTAL_BLOCKS_TO_SEARCH = 300; // Total blocks to search (reduced for better performance)
 
@@ -27,6 +24,7 @@ interface GameRecord {
 
 const LastPlayedGames = () => {
   const { contract, gameState } = useGameContract();
+  const { chainConfig } = useChain();
   const { getGameData } = useAkave();
   const [games, setGames] = useState<GameRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -282,7 +280,7 @@ const LastPlayedGames = () => {
           <div className="p-2 bg-gradient-to-br from-purple-500 to-blue-600 rounded-lg">
             <History className="w-5 h-5 text-white" />
           </div>
-          <h3 className="text-xl font-semibold text-white">Last Played Games</h3>
+          <h3 className="text-xl font-semibold text-white">Last Played Games on {chainConfig.displayName}</h3>
         </div>
         
         <div className="space-y-3">
@@ -312,7 +310,7 @@ const LastPlayedGames = () => {
                 <div className="flex items-center gap-2">
                   <span>Player:</span>
                   <a 
-                    href={`${BLOCKSCOUT_URL}/address/${game.player}`}
+                    href={`${chainConfig.blockscoutUrl}/address/${game.player}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-400 hover:text-blue-300 transition-colors"
@@ -321,12 +319,12 @@ const LastPlayedGames = () => {
                   </a>
                 </div>
                 <div>Difficulty: {game.difficulty}</div>
-                <div>Bet: {game.bet} ETH</div>
+                <div>Bet: {game.bet} {chainConfig.currency}</div>
                 <div>Steps: {game.steps}</div>
                 {game.result === 'win' && (
                   <>
                     <div>Multiplier: {game.multiplier}x</div>
-                    <div>Payout: {game.payout} ETH</div>
+                    <div>Payout: {game.payout} {chainConfig.currency}</div>
                   </>
                 )}
                 <div className="flex items-center gap-2">
@@ -335,7 +333,7 @@ const LastPlayedGames = () => {
                   </span>
                   {game.transactionHash && (
                     <a
-                      href={`${BLOCKSCOUT_URL}/tx/${game.transactionHash}`}
+                      href={`${chainConfig.blockscoutUrl}/tx/${game.transactionHash}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-400 hover:text-blue-300 transition-colors text-xs"

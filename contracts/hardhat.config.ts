@@ -81,6 +81,16 @@ const config: HardhatUserConfig = {
       url: "https://flare.gateway.tenderly.co/pdYQcL54puW9QXPURLblM",
       accounts: [`${PRIVATE_KEY}`],
       chainId: 14,
+    },
+    berachain: {
+      url: "https://rpc.berachain.com/",
+      accounts: [`${PRIVATE_KEY}`],
+      chainId: 80094,
+    },
+    bepolia: {
+      url: "https://bepolia.rpc.berachain.com/",
+      accounts: [`${PRIVATE_KEY}`],
+      chainId: 80069,
     }
   },
   etherscan: {
@@ -91,6 +101,8 @@ const config: HardhatUserConfig = {
       songbird: `${FLARESCAN_API_KEY}`,
       flare: `${FLARESCAN_API_KEY}`,
       sepolia: `${ETHERSCAN_API_URL}`,
+      berachain: "berachain",
+      bepolia: "bepolia",
     },
     customChains: [
       {
@@ -141,6 +153,22 @@ const config: HardhatUserConfig = {
               ? `?x-apikey=${FLARE_EXPLORER_API_KEY}`
               : ""), // Must not have / endpoint
           browserURL: "https://flare-explorer.flare.network/",
+        },
+      },
+      {
+        network: "berachain",
+        chainId: 80094,
+        urls: {
+          apiURL: "https://api.berascan.com/api", // Berachain API endpoint
+          browserURL: "https://berascan.com/",
+        },
+      },
+      {
+        network: "bepolia",
+        chainId: 80069,
+        urls: {
+          apiURL: "https://bepolia.beratrail.io/api", // Bepolia API endpoint
+          browserURL: "https://bepolia.beratrail.io/",
         },
       },      
     ],

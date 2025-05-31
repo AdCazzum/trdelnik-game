@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from './useWallet';
+import { useChain } from './useChain';
 
 interface MeritsState {
   isRegistered: boolean;
@@ -9,10 +10,9 @@ interface MeritsState {
   topPercent?: number;
 }
 
-const MERITS_API_URL = import.meta.env.VITE_MERITS_API_URL || 'https://merits-staging.blockscout.com/api/v1';
-
 export const useMerits = () => {
   const { address } = useWallet();
+  const { chainConfig } = useChain();
   const [meritsState, setMeritsState] = useState<MeritsState>({ isRegistered: false });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -23,7 +23,7 @@ export const useMerits = () => {
       setIsLoading(true);
       
       // Get user info
-      const userResponse = await fetch(`${MERITS_API_URL}/auth/user/${address}`, {
+      const userResponse = await fetch(`${chainConfig.meritsApiUrl}/auth/user/${address}`, {
         headers: {
           'Accept': 'application/json',
         },
@@ -38,7 +38,7 @@ export const useMerits = () => {
       }
 
       // Get leaderboard info
-      const leaderboardResponse = await fetch(`${MERITS_API_URL}/leaderboard/users/${address}`, {
+      const leaderboardResponse = await fetch(`${chainConfig.meritsApiUrl}/leaderboard/users/${address}`, {
         headers: {
           'Accept': 'application/json',
         },
@@ -76,7 +76,7 @@ export const useMerits = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [address]);
+  }, [address, chainConfig.meritsApiUrl]);
 
   useEffect(() => {
     if (address) {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import WalletConnection from '@/components/WalletConnection';
+import ChainSelector from '@/components/ChainSelector';
 import GameBoard from '@/components/GameBoard';
 import { useWallet } from '@/hooks/useWallet';
 import LastPlayedGames from '@/components/LastPlayedGames';
@@ -19,6 +20,11 @@ const Index = () => {
       </div>
 
       <div className="container mx-auto px-4 py-8 relative z-10">
+        {/* Top header with Chain Selector */}
+        <div className="flex justify-end mb-6">
+          <ChainSelector />
+        </div>
+
         {/* Enhanced Header */}
         <div className="text-center mb-12">
           <div className="mb-6 relative">

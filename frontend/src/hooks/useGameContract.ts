@@ -3,16 +3,17 @@ import { toast } from '@/components/ui/use-toast';
 import { Difficulty, GAME_CONFIGS } from '@/components/GameBoard';
 import { ethers } from 'ethers';
 import contractArtifact from '../../../contracts/artifacts/contracts/Game.sol/TrdelnikGame.json';
+// Import BerachainGame only if available, fallback to TrdelnikGame
+let berachainContractArtifact: any;
+try {
+  berachainContractArtifact = require('../../../contracts/artifacts/contracts/BerachainGame.sol/BerachainGame.json');
+} catch (error) {
+  console.warn('BerachainGame artifact not found, using TrdelnikGame ABI for all chains');
+  berachainContractArtifact = contractArtifact;
+}
 import { useWallet } from './useWallet';
 import { useAkave } from './useAkave';
-
-// const CONTRACT_ADDRESS = '0xefAB5594DB78bE844AEEED30a0C50333bacB7261';
-const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
-
-const CONTRACT_ABI = contractArtifact.abi;
-const BLOCKSCOUT_URL = import.meta.env.VITE_BLOCKSCOUT_URL || 'https://blockscout.com/astar/tx/';
-const MERITS_API_URL = import.meta.env.VITE_MERITS_API_PARTNER_URL || 'https://merits-staging.blockscout.com/api/v1';
-const MERITS_API_KEY = import.meta.env.VITE_MERITS_API_KEY;
+import { useChain } from './useChain';
 
 export interface GameState {
   gameId: number;
@@ -33,19 +34,31 @@ export interface GameState {
 export const useGameContract = (onMeritsDistributed?: () => void) => {
   const { isConnected, address } = useWallet();
   const { saveGameData } = useAkave();
+  const { chainConfig } = useChain();
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [contract, setContract] = useState<ethers.Contract | null>(null);
 
+  // Get contract ABI based on chain
+  const getContractABI = useCallback(() => {
+    // For Berachain networks, use BerachainGame ABI
+    if (chainConfig.id === 'berachain') {
+      return berachainContractArtifact.abi;
+    }
+    // For Flare networks (Coston2), use TrdelnikGame ABI
+    return contractArtifact.abi;
+  }, [chainConfig.id]);
+
   // Initialize contract
   useEffect(() => {
     const initContract = async () => {
-      if (!window.ethereum) return;
+      if (!window.ethereum || !chainConfig.contractAddress) return;
       
       try {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
-        const contractInstance = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+        const contractABI = getContractABI();
+        const contractInstance = new ethers.Contract(chainConfig.contractAddress, contractABI, signer);
         setContract(contractInstance);
       } catch (error) {
         console.error('Failed to initialize contract:', error);
@@ -55,7 +68,7 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
     if (isConnected) {
       initContract();
     }
-  }, [isConnected]);
+  }, [isConnected, chainConfig.contractAddress, getContractABI]);
 
   // Convert difficulty enum to contract format
   const difficultyToEnum = (difficulty: Difficulty): number => {
@@ -74,11 +87,13 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
   // Distribute Merits
   const distributeMerits = async (address: string) => {
     try {
-      const response = await fetch(`${MERITS_API_URL}/partner/api/v1/distribute`, {
+      const meritsApiKey = import.meta.env.VITE_MERITS_API_KEY;
+      
+      const response = await fetch(`${chainConfig.meritsApiUrl}/partner/api/v1/distribute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': MERITS_API_KEY || '',
+          'Authorization': meritsApiKey || '',
         },
         body: JSON.stringify({
           id: `trdelnik_game-${Date.now()}`,
@@ -132,12 +147,22 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
       return;
     }
 
+    if (!chainConfig.contractAddress) {
+      toast({
+        title: "Contract not configured",
+        description: `Please configure the contract address for ${chainConfig.displayName}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const contractABI = getContractABI();
+      const contract = new ethers.Contract(chainConfig.contractAddress, contractABI, signer);
       
       const tx = await contract.startGame(difficultyToEnum(difficulty), {
         value: ethers.parseEther(betAmount)
@@ -179,7 +204,7 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
 
       toast({
         title: "Game Started!",
-        description: `Game ID: ${gameId}<br/>View on <a href="${BLOCKSCOUT_URL}${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
+        description: `Game ID: ${gameId}<br/>View on <a href="${chainConfig.blockscoutUrl}/tx/${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
         variant: "default",
       });
 
@@ -193,18 +218,19 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
     } finally {
       setIsLoading(false);
     }
-  }, [address]);
+  }, [address, chainConfig, getContractABI, getCurrentMultiplier]);
 
   // Play next step
   const playStep = useCallback(async () => {
-    if (!gameState?.gameId) return;
+    if (!gameState?.gameId || !chainConfig.contractAddress) return;
 
     setIsLoading(true);
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const contractABI = getContractABI();
+      const contract = new ethers.Contract(chainConfig.contractAddress, contractABI, signer);
       
       const tx = await contract.playStep(gameState.gameId);
       const receipt = await tx.wait();
@@ -236,7 +262,7 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
         
         toast({
           title: "Step Successful! 🎉",
-          description: `Advanced to step ${newStep}<br/>View on <a href="${BLOCKSCOUT_URL}${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
+          description: `Advanced to step ${newStep}<br/>View on <a href="${chainConfig.blockscoutUrl}/tx/${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
           variant: "default",
         });
 
@@ -278,7 +304,9 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
             stepHistory: updatedStepHistory,
             transactionHash: receipt.hash,
             payout: '0',
-            multiplier: '0'
+            multiplier: '0',
+            chain: chainConfig.displayName,
+            chainId: chainConfig.chainId
           };
 
           await saveGameData(gameDataToSave);
@@ -290,7 +318,7 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
         
         toast({
           title: "Game Over! 💥",
-          description: `You lost this round. Better luck next time!<br/>View on <a href="${BLOCKSCOUT_URL}${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
+          description: `You lost this round. Better luck next time!<br/>View on <a href="${chainConfig.blockscoutUrl}/tx/${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
           variant: "destructive",
         });
       }
@@ -305,18 +333,19 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
     } finally {
       setIsLoading(false);
     }
-  }, [gameState]);
+  }, [gameState, chainConfig, getContractABI, address, saveGameData]);
 
   // Cash out current winnings
   const cashOut = useCallback(async () => {
-    if (!gameState?.gameId) return;
+    if (!gameState?.gameId || !chainConfig.contractAddress) return;
 
     setIsLoading(true);
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const contractABI = getContractABI();
+      const contract = new ethers.Contract(chainConfig.contractAddress, contractABI, signer);
       
       const tx = await contract.doCashout(gameState.gameId);
       const receipt = await tx.wait();
@@ -348,7 +377,9 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
           stepHistory: gameState.stepHistory || [],
           transactionHash: receipt.hash,
           payout: payout,
-          multiplier: finalMultiplier.toFixed(2)
+          multiplier: finalMultiplier.toFixed(2),
+          chain: chainConfig.displayName,
+          chainId: chainConfig.chainId
         };
 
         await saveGameData(gameDataToSave);
@@ -360,7 +391,7 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
 
       toast({
         title: "Successfully Cashed Out! 💰",
-        description: `You won ${payout} ETH (${finalMultiplier.toFixed(2)}x multiplier)<br/>View on <a href="${BLOCKSCOUT_URL}${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
+        description: `You won ${payout} ${chainConfig.currency} (${finalMultiplier.toFixed(2)}x multiplier)<br/>View on <a href="${chainConfig.blockscoutUrl}/tx/${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
         variant: "default",
       });
 
@@ -374,7 +405,7 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
     } finally {
       setIsLoading(false);
     }
-  }, [gameState, getCurrentMultiplier]);
+  }, [gameState, getCurrentMultiplier, chainConfig, getContractABI, address, saveGameData]);
 
   return {
     gameState,
@@ -384,5 +415,6 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
     cashOut,
     getCurrentMultiplier,
     contract,
+    chainConfig,
   };
 };
