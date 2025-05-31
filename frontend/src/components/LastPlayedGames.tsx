@@ -4,11 +4,13 @@ import { useGameContract } from '@/hooks/useGameContract';
 import { useEffect, useState } from 'react';
 import { ethers } from 'ethers';
 import contractArtifact from '../../../contracts/artifacts/contracts/Game.sol/TrdelnikGame.json';
+import { useAkave } from '../hooks/useAkave';
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
 const CONTRACT_ABI = contractArtifact.abi;
-const BLOCK_LIMIT = 30; // Maximum blocks per request
 const BLOCKSCOUT_URL = import.meta.env.VITE_BLOCKSCOUT_URL_BASE;
+const BLOCK_LIMIT = 30; // Maximum blocks per request
+const TOTAL_BLOCKS_TO_SEARCH = 300; // Total blocks to search (reduced for better performance)
 
 interface GameRecord {
   gameId: number;
@@ -24,145 +26,206 @@ interface GameRecord {
 }
 
 const LastPlayedGames = () => {
-  const [lastGames, setLastGames] = useState<GameRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { contract, gameState } = useGameContract();
+  const { getGameData } = useAkave();
+  const [games, setGames] = useState<GameRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  useEffect(() => {
-    const fetchGameHistory = async () => {
-      if (!window.ethereum) return;
+  // Function to manually refresh the game list
+  const refreshGameList = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
 
-      try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+  const fetchGameHistory = async () => {
+    if (!contract || !contract.runner?.provider) {
+      console.log('Contract or provider not available yet');
+      return;
+    }
 
-        // Get current block
-        const currentBlock = await provider.getBlockNumber();
-        const fromBlock = Math.max(0, currentBlock - 1000);
-        console.log('Fetching events from block:', fromBlock, 'to', currentBlock);
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Get current block
+      const provider = contract.runner.provider;
+      const currentBlock = await provider.getBlockNumber();
+      const startBlock = Math.max(0, currentBlock - TOTAL_BLOCKS_TO_SEARCH);
 
-        // Fetch events in batches
-        const fetchEventsInBatches = async (eventName: string) => {
-          const events = [];
-          let currentFromBlock = fromBlock;
+      console.log(`Fetching games from block ${startBlock} to ${currentBlock}`);
+
+      let allEvents: any[] = [];
+      
+      // Fetch events in batches of BLOCK_LIMIT
+      for (let fromBlock = startBlock; fromBlock <= currentBlock; fromBlock += BLOCK_LIMIT) {
+        const toBlock = Math.min(fromBlock + BLOCK_LIMIT - 1, currentBlock);
+        
+        try {
+          console.log(`Fetching batch from ${fromBlock} to ${toBlock}`);
+          const filter = contract.filters.GameStarted();
+          const events = await contract.queryFilter(filter, fromBlock, toBlock);
+          allEvents.push(...events);
           
-          while (currentFromBlock < currentBlock) {
-            const toBlock = Math.min(currentFromBlock + BLOCK_LIMIT - 1, currentBlock);
-            console.log(`Fetching ${eventName} events from block ${currentFromBlock} to ${toBlock}`);
-            
-            try {
-              const batchEvents = await contract.queryFilter(eventName, currentFromBlock, toBlock);
-              events.push(...batchEvents);
-            } catch (error) {
-              console.error(`Error fetching ${eventName} events from block ${currentFromBlock} to ${toBlock}:`, error);
-            }
-            
-            currentFromBlock = toBlock + 1;
-          }
-          
-          return events;
-        };
-
-        // Fetch all events in batches
-        const [gameStartedEvents, gameLostEvents, cashoutEvents] = await Promise.all([
-          fetchEventsInBatches('GameStarted'),
-          fetchEventsInBatches('GameLost'),
-          fetchEventsInBatches('Cashout')
-        ]);
-
-        console.log('GameStarted events:', gameStartedEvents.length);
-        console.log('GameLost events:', gameLostEvents.length);
-        console.log('Cashout events:', cashoutEvents.length);
-
-        // Combine and process events
-        const games = new Map<number, GameRecord>();
-
-        // Process GameStarted events
-        for (const event of gameStartedEvents) {
-          try {
-            const typedEvent = event as ethers.EventLog;
-            if (!typedEvent.args) continue;
-            
-            const [gameId, player, difficulty, bet] = typedEvent.args;
-            if (!gameId || !player || difficulty === undefined || !bet) continue;
-
-            const block = await event.getBlock();
-            if (!block) continue;
-            
-            games.set(Number(gameId), {
-              gameId: Number(gameId),
-              player,
-              difficulty: ['Easy', 'Medium', 'Hard', 'Hardcore'][Number(difficulty)],
-              bet: ethers.formatEther(bet),
-              result: 'loss', // Default to loss until we find a win
-              timestamp: block.timestamp * 1000,
-              steps: 1,
-              transactionHash: event.transactionHash
-            });
-            console.log('Processed GameStarted:', Number(gameId));
-          } catch (error) {
-            console.error('Error processing GameStarted event:', error);
-          }
+          // Small delay to avoid overwhelming the RPC
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (batchError) {
+          console.error(`Error fetching batch ${fromBlock}-${toBlock}:`, batchError);
+          // Continue with next batch instead of failing completely
         }
-
-        // Process GameLost events
-        for (const event of gameLostEvents) {
-          try {
-            const typedEvent = event as ethers.EventLog;
-            if (!typedEvent.args) continue;
-            
-            const [gameId, step] = typedEvent.args;
-            if (!gameId || step === undefined) continue;
-
-            const game = games.get(Number(gameId));
-            if (game) {
-              game.result = 'loss';
-              game.steps = Number(step);
-              console.log('Processed GameLost:', Number(gameId));
-            }
-          } catch (error) {
-            console.error('Error processing GameLost event:', error);
-          }
-        }
-
-        // Process Cashout events
-        for (const event of cashoutEvents) {
-          try {
-            const typedEvent = event as ethers.EventLog;
-            if (!typedEvent.args) continue;
-            
-            const [gameId, payout] = typedEvent.args;
-            if (!gameId || !payout) continue;
-
-            const game = games.get(Number(gameId));
-            if (game) {
-              game.result = 'win';
-              game.payout = ethers.formatEther(payout);
-              game.multiplier = (Number(ethers.formatEther(payout)) / Number(game.bet)).toFixed(2);
-              console.log('Processed Cashout:', Number(gameId));
-            }
-          } catch (error) {
-            console.error('Error processing Cashout event:', error);
-          }
-        }
-
-        // Convert to array and sort by timestamp
-        const sortedGames = Array.from(games.values())
-          .sort((a, b) => b.timestamp - a.timestamp)
-          .slice(0, 5); // Keep only last 5 games
-
-        console.log('Final processed games:', sortedGames);
-        setLastGames(sortedGames);
-      } catch (error) {
-        console.error('Error fetching game history:', error);
-      } finally {
-        setIsLoading(false);
       }
-    };
+      
+      console.log(`Found ${allEvents.length} GameStarted events total`);
 
+      if (allEvents.length === 0) {
+        setGames([]);
+        return;
+      }
+      
+      // Sort events by block number (newest first) and take only the latest 10
+      const sortedEvents = allEvents
+        .sort((a, b) => (b.blockNumber || 0) - (a.blockNumber || 0))
+        .slice(0, 10);
+      
+      // Helper function to fetch events in batches
+      const fetchEventsInBatches = async (filter: any) => {
+        const events: any[] = [];
+        for (let fromBlock = startBlock; fromBlock <= currentBlock; fromBlock += BLOCK_LIMIT) {
+          const toBlock = Math.min(fromBlock + BLOCK_LIMIT - 1, currentBlock);
+          try {
+            const batchEvents = await contract.queryFilter(filter, fromBlock, toBlock);
+            events.push(...batchEvents);
+            await new Promise(resolve => setTimeout(resolve, 50));
+          } catch (error) {
+            console.error(`Error fetching events batch ${fromBlock}-${toBlock}:`, error);
+          }
+        }
+        return events;
+      };
+      
+      const gamePromises = sortedEvents.map(async (event) => {
+        try {
+          // Type cast the event to EventLog to access args
+          const eventLog = event as ethers.EventLog;
+          const gameId = eventLog.args?.gameId;
+          if (!gameId) return null;
+
+          // Convert gameId to number using BigInt conversion
+          const gameIdNumber = Number(gameId);
+          console.log('Processing game ID:', gameIdNumber, 'Original:', gameId);
+
+          const game = await contract.games(gameIdNumber);
+          const gameLostFilter = contract.filters.GameLost(gameIdNumber);
+          const cashoutFilter = contract.filters.Cashout(gameIdNumber);
+          
+          // Use batched fetching for game-specific events
+          const [lostEvents, cashoutEvents] = await Promise.all([
+            fetchEventsInBatches(gameLostFilter),
+            fetchEventsInBatches(cashoutFilter)
+          ]);
+
+          const isLost = lostEvents.length > 0;
+          const cashoutEvent = cashoutEvents[0] as ethers.EventLog;
+
+          // Convert game properties using Number() directly
+          const currentStep = Number(game.currentStep);
+          const difficulty = Number(game.difficulty);
+
+          // Safe formatEther with null checks
+          const formatEtherSafe = (value: any) => {
+            if (!value || value === null || value === undefined) return '0';
+            try {
+              return ethers.formatEther(value);
+            } catch (error) {
+              console.error('Error formatting ether value:', value, error);
+              return '0';
+            }
+          };
+
+          return {
+            gameId: gameIdNumber,
+            player: game.player || 'Unknown',
+            difficulty: ['Easy', 'Medium', 'Hard'][difficulty] || 'Unknown',
+            bet: formatEtherSafe(game.bet),
+            result: (isLost ? 'loss' : 'win') as 'win' | 'loss',
+            steps: currentStep,
+            timestamp: Math.floor(Date.now() / 1000),
+            transactionHash: event.transactionHash,
+            payout: cashoutEvent && cashoutEvent.args?.payout ? formatEtherSafe(cashoutEvent.args.payout) : undefined,
+            multiplier: cashoutEvent && cashoutEvent.args?.multiplier ? formatEtherSafe(cashoutEvent.args.multiplier) : undefined
+          };
+        } catch (error) {
+          console.error('Error processing game event:', error);
+          return null;
+        }
+      });
+
+      const gameResults = await Promise.all(gamePromises);
+      const validGames = gameResults.filter(game => game !== null) as GameRecord[];
+      setGames(validGames.sort((a, b) => b.timestamp - a.timestamp));
+      
+      console.log(`Processed ${validGames.length} valid games`);
+    } catch (error) {
+      console.error('Error fetching game history:', error);
+      setError('Failed to load game history');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Refresh when contract changes or when manually triggered
+  useEffect(() => {
     fetchGameHistory();
+  }, [contract, refreshTrigger]);
+
+  // Monitor game state changes and refresh when game ends
+  useEffect(() => {
+    if (gameState && !gameState.active && gameState.gameId > 0) {
+      console.log('Game ended, refreshing game list in 3 seconds...');
+      const timer = setTimeout(() => {
+        refreshGameList();
+      }, 3000); // Wait 3 seconds for events to be indexed
+
+      return () => clearTimeout(timer);
+    }
+  }, [gameState]);
+
+  // Expose refresh function globally for debugging
+  useEffect(() => {
+    (window as any).refreshGameList = refreshGameList;
+    return () => {
+      delete (window as any).refreshGameList;
+    };
   }, []);
 
-  if (isLoading) {
+  const handleDownloadGameData = async (gameId: number) => {
+    try {
+      const gameData = await getGameData(gameId);
+      if (!gameData) {
+        console.error('Game data not found on Akave');
+        return;
+      }
+
+      // Create a blob with the game data
+      const blob = new Blob([JSON.stringify(gameData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      // Create a temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `game-${gameId}-summary.json`;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading game data:', error);
+    }
+  };
+
+  if (loading) {
     return (
       <div className="max-w-4xl mx-auto">
         <Card className="p-6 bg-white/10 backdrop-blur-sm border-white/20">
@@ -172,13 +235,31 @@ const LastPlayedGames = () => {
             </div>
             <h3 className="text-xl font-semibold text-white">Last Played Games</h3>
           </div>
-          <p className="text-white/60 text-center">Loading game history...</p>
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          </div>
         </Card>
       </div>
     );
   }
 
-  if (lastGames.length === 0) {
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <Card className="p-6 bg-white/10 backdrop-blur-sm border-white/20">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-gradient-to-br from-purple-500 to-blue-600 rounded-lg">
+              <History className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="text-xl font-semibold text-white">Last Played Games</h3>
+          </div>
+          <p className="text-red-400 text-center">{error}</p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (games.length === 0) {
     return (
       <div className="max-w-4xl mx-auto">
         <Card className="p-6 bg-white/10 backdrop-blur-sm border-white/20">
@@ -205,7 +286,7 @@ const LastPlayedGames = () => {
         </div>
         
         <div className="space-y-3">
-          {lastGames.map((game) => (
+          {games.map((game) => (
             <div
               key={game.gameId}
               className="p-4 rounded-lg border-2 border-white/20 bg-white/5 hover:bg-white/10 transition-all"
@@ -263,6 +344,14 @@ const LastPlayedGames = () => {
                     </a>
                   )}
                 </div>
+              </div>
+              <div className="mt-2">
+                <button
+                  onClick={() => handleDownloadGameData(game.gameId)}
+                  className="px-2 py-1 text-xs bg-white/10 text-white/70 rounded hover:bg-white/20 hover:text-white/90 transition-colors border border-white/20"
+                >
+                  📄 Data
+                </button>
               </div>
             </div>
           ))}

@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { Difficulty, GAME_CONFIGS } from '@/components/GameBoard';
 import { ethers } from 'ethers';
 import contractArtifact from '../../../contracts/artifacts/contracts/Game.sol/TrdelnikGame.json';
 import { useWallet } from './useWallet';
+import { useAkave } from './useAkave';
 
 // const CONTRACT_ADDRESS = '0xefAB5594DB78bE844AEEED30a0C50333bacB7261';
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
@@ -22,12 +23,39 @@ export interface GameState {
   difficulty: string;
   multiplier: string;
   payout: string;
+  stepHistory?: Array<{
+    step: number;
+    success: boolean;
+    timestamp: number;
+  }>;
 }
 
 export const useGameContract = (onMeritsDistributed?: () => void) => {
   const { isConnected, address } = useWallet();
+  const { saveGameData } = useAkave();
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [contract, setContract] = useState<ethers.Contract | null>(null);
+
+  // Initialize contract
+  useEffect(() => {
+    const initContract = async () => {
+      if (!window.ethereum) return;
+      
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        const contractInstance = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+        setContract(contractInstance);
+      } catch (error) {
+        console.error('Failed to initialize contract:', error);
+      }
+    };
+
+    if (isConnected) {
+      initContract();
+    }
+  }, [isConnected]);
 
   // Convert difficulty enum to contract format
   const difficultyToEnum = (difficulty: Difficulty): number => {
@@ -136,7 +164,12 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
         bet: betAmount,
         difficulty: difficulty.toString(),
         multiplier: getCurrentMultiplier().toFixed(2),
-        payout: '0'
+        payout: '0',
+        stepHistory: [{
+          step: 1,
+          success: true,
+          timestamp: Math.floor(Date.now() / 1000)
+        }]
       });
 
       // Distribute Merits
@@ -189,7 +222,17 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
       
       if (success) {
         const newStep = gameState.currentStep + 1;
-        setGameState(prev => prev ? { ...prev, currentStep: newStep } : null);
+        const newStepHistoryEntry = {
+          step: newStep,
+          success: true,
+          timestamp: Math.floor(Date.now() / 1000)
+        };
+
+        setGameState(prev => prev ? { 
+          ...prev, 
+          currentStep: newStep,
+          stepHistory: [...(prev.stepHistory || []), newStepHistoryEntry]
+        } : null);
         
         toast({
           title: "Step Successful! 🎉",
@@ -207,7 +250,43 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
           await cashOut();
         }
       } else {
-        setGameState(prev => prev ? { ...prev, active: false, lost: true } : null);
+        const failedStepEntry = {
+          step: gameState.currentStep + 1,
+          success: false,
+          timestamp: Math.floor(Date.now() / 1000)
+        };
+
+        const updatedStepHistory = [...(gameState.stepHistory || []), failedStepEntry];
+
+        setGameState(prev => prev ? { 
+          ...prev, 
+          active: false, 
+          lost: true,
+          stepHistory: updatedStepHistory
+        } : null);
+
+        // Save game summary to Akave (loss)
+        try {
+          const gameDataToSave = {
+            gameId: gameState.gameId,
+            player: address || 'Unknown',
+            difficulty: gameState.difficulty,
+            bet: gameState.bet,
+            result: 'loss' as const,
+            steps: gameState.currentStep,
+            timestamp: Math.floor(Date.now() / 1000),
+            stepHistory: updatedStepHistory,
+            transactionHash: receipt.hash,
+            payout: '0',
+            multiplier: '0'
+          };
+
+          await saveGameData(gameDataToSave);
+          console.log('Game loss summary uploaded to Akave successfully');
+        } catch (akaveError) {
+          console.error('Failed to upload game loss summary to Akave:', akaveError);
+          // Don't show error to user, just log it
+        }
         
         toast({
           title: "Game Over! 💥",
@@ -256,6 +335,29 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
 
       setGameState(prev => prev ? { ...prev, active: false } : null);
 
+      // Save game summary to Akave
+      try {
+        const gameDataToSave = {
+          gameId: gameState.gameId,
+          player: address || 'Unknown',
+          difficulty: gameState.difficulty,
+          bet: gameState.bet,
+          result: 'win' as const,
+          steps: gameState.currentStep,
+          timestamp: Math.floor(Date.now() / 1000),
+          stepHistory: gameState.stepHistory || [],
+          transactionHash: receipt.hash,
+          payout: payout,
+          multiplier: finalMultiplier.toFixed(2)
+        };
+
+        await saveGameData(gameDataToSave);
+        console.log('Game summary uploaded to Akave successfully');
+      } catch (akaveError) {
+        console.error('Failed to upload game summary to Akave:', akaveError);
+        // Don't show error to user, just log it
+      }
+
       toast({
         title: "Successfully Cashed Out! 💰",
         description: `You won ${payout} ETH (${finalMultiplier.toFixed(2)}x multiplier)<br/>View on <a href="${BLOCKSCOUT_URL}${receipt.hash}" target="_blank" rel="noopener noreferrer">Blockscout</a>`,
@@ -281,5 +383,6 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
     playStep,
     cashOut,
     getCurrentMultiplier,
+    contract,
   };
 };

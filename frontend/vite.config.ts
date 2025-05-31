@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => ({
         target: process.env.VITE_MERITS_API_URL || 'https://merits-staging.blockscout.com/api/v1',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/merits/, ''),
-      },
+      }
     },
   },
   plugins: [
