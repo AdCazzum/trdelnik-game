@@ -13,13 +13,15 @@ const BLOCKSCOUT_URL = import.meta.env.VITE_BLOCKSCOUT_URL || 'https://blockscou
 const MERITS_API_URL = import.meta.env.VITE_MERITS_API_PARTNER_URL || 'https://merits-staging.blockscout.com/api/v1';
 const MERITS_API_KEY = import.meta.env.VITE_MERITS_API_KEY;
 
-interface GameState {
-  gameId?: number;
+export interface GameState {
+  gameId: number;
   active: boolean;
   lost: boolean;
   currentStep: number;
   bet: string;
-  difficulty: Difficulty;
+  difficulty: string;
+  multiplier: string;
+  payout: string;
 }
 
 export const useGameContract = (onMeritsDistributed?: () => void) => {
@@ -132,7 +134,9 @@ export const useGameContract = (onMeritsDistributed?: () => void) => {
         lost: false,
         currentStep: 1, // First step completed automatically
         bet: betAmount,
-        difficulty
+        difficulty: difficulty.toString(),
+        multiplier: getCurrentMultiplier().toFixed(2),
+        payout: '0'
       });
 
       // Distribute Merits

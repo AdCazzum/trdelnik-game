@@ -2,6 +2,7 @@ import { useState } from 'react';
 import WalletConnection from '@/components/WalletConnection';
 import GameBoard from '@/components/GameBoard';
 import { useWallet } from '@/hooks/useWallet';
+import LastPlayedGames from '@/components/LastPlayedGames';
 
 const Index = () => {
   const { isConnected, isInitialized } = useWallet();
@@ -59,7 +60,12 @@ const Index = () => {
         )}
 
         {/* Show game board when connected */}
-        {isConnected && <GameBoard />}
+        {isConnected && (
+          <div className="space-y-6">
+            <GameBoard />
+            <LastPlayedGames />
+          </div>
+        )}
       </div>
     </div>
   );
