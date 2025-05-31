@@ -2,11 +2,11 @@ import { useState, useCallback, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { Difficulty, GAME_CONFIGS } from '@/components/GameBoard';
 import { ethers } from 'ethers';
-import contractArtifact from '../contracts/artifacts/contracts/Game.sol/TrdelnikGame.json';
+import contractArtifact from '../contracts/artifacts/Game.sol/TrdelnikGame.json';
 // Import BerachainGame only if available, fallback to TrdelnikGame
 let berachainContractArtifact: any;
 try {
-  berachainContractArtifact = require('../contracts/artifacts/contracts/BerachainGame.sol/BerachainGame.json');
+  berachainContractArtifact = require('../contracts/artifacts/BerachainGame.sol/BerachainGame.json');
 } catch (error) {
   console.warn('BerachainGame artifact not found, using TrdelnikGame ABI for all chains');
   berachainContractArtifact = contractArtifact;
