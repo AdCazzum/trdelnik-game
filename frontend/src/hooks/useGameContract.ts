@@ -5,7 +5,9 @@ import { ethers } from 'ethers';
 import contractArtifact from '../../../contracts/artifacts/contracts/Game.sol/TrdelnikGame.json';
 import { useWallet } from './useWallet';
 
-const CONTRACT_ADDRESS = '0xefAB5594DB78bE844AEEED30a0C50333bacB7261';
+// const CONTRACT_ADDRESS = '0xefAB5594DB78bE844AEEED30a0C50333bacB7261';
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
+
 const CONTRACT_ABI = contractArtifact.abi;
 const BLOCKSCOUT_URL = import.meta.env.VITE_BLOCKSCOUT_URL || 'https://blockscout.com/astar/tx/';
 
