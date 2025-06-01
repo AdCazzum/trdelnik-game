@@ -11,8 +11,6 @@
     "preview": "vite preview",
     "copy-contracts": "cp -r ../contracts/artifacts/contracts/* src/contracts/artifacts/",
     "copy-contracts:clean": "rm -rf src/contracts/artifacts && npm run copy-contracts",
-    "prebuild": "npm run copy-contracts",
-    "build:full": "npm run copy-contracts && npm run build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.821.0",
