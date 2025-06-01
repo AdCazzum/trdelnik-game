@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "copy-contracts": "cp -r ../contracts/artifacts/contracts/* src/contracts/artifacts/",
-    "copy-contracts:clean": "rm -rf src/contracts/artifacts && npm run copy-contracts",
+    "copy-contracts:clean": "rm -rf src/contracts/artifacts && npm run copy-contracts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.821.0",
